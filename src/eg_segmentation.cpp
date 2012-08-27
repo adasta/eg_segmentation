@@ -73,9 +73,12 @@ int cv::segment_image (const cv::Mat& input, cv::Mat& output, float sigma,
   int width = input.cols ;
   int height = input.rows ;
 
-
-  cv::GaussianBlur(input,output, cv::Size(1.5*sigma,1.5*sigma), sigma, sigma);
-
+  if(sigma > 0.001){
+    cv::GaussianBlur(input,output, cv::Size(1.5*sigma,1.5*sigma), sigma, sigma);
+  }
+  else{
+    output = input.clone();
+  }
 
   edge* edges;
 
@@ -89,7 +92,9 @@ int cv::segment_image (const cv::Mat& input, cv::Mat& output, float sigma,
   if (input.type() == CV_32F){
       edges = build_edge_graph<float>( output, num);
     }
-
+  else{
+    std::cerr <<"[EG_SEGMENTATION] UNSUPPORTED INPUT TYPE\n";
+  }
     // segment
     universe *u = segment_graph(width*height, num, edges, k);
 
@@ -100,6 +105,24 @@ int cv::segment_image (const cv::Mat& input, cv::Mat& output, float sigma,
       if ((a != b) && ((u->size(a) < min_size) || (u->size(b) < min_size)))
         u->join(a, b);
     }
+    std::map<int, int> remap;
+    int id_counter=0;
+    output.create(height, width, CV_16UC1);
+    for (int y = 0; y < height; y++) {
+      uint16_t* orow = output.ptr<uint16_t>(y);
+       for (int x = 0; x < width; x++) {
+         int comp = u->find(y * width + x);
+         std::map<int,int>::iterator id_iter;
+         id_iter = remap.find(comp);
+         if (id_iter == remap.end()){
+          remap[comp] =id_counter;
+          id_counter++;
+          id_iter = remap.find(comp);
+         }
+         orow[x] = id_iter->second;
+       }
+     }
+
     delete [] edges;
     int num_ccs = u->num_sets();
     delete u;
